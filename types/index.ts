@@ -4,8 +4,8 @@ export interface Repository {
   full_name: string;
   private: boolean;
   html_url: string;
-  description?: string;
-  language?: string;
+  description?: string | null;
+  language?: string | null; 
 }
 
 export interface ProjectAnalysis {
