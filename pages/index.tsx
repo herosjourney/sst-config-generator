@@ -28,14 +28,8 @@ export default function Home() {
       
       setAnalysis(analysisData)
       
-      // Always show questions for static sites to configure distribution and domain
-      if (analysisData.type === 'STATIC') {
-        setCurrentStep('questions')
-      } else {
-        // For SSR and CSR, we still ask about distribution and custom domain
-        // but with smart defaults for everything else
-        setCurrentStep('questions')
-      }
+      // Always show questions to configure distribution and custom domain
+      setCurrentStep('questions')
     } catch (error) {
       console.error('Analysis failed:', error)
       alert('Failed to analyze repository. Please try again.')
@@ -280,6 +274,7 @@ export default function Home() {
           <div className="fade-in">
             <ConfigResult 
               config={finalConfig} 
+              repository={selectedRepo}
               onSave={saveConfiguration}
             />
             
