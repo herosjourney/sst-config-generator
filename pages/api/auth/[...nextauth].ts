@@ -48,9 +48,6 @@ export const authOptions: NextAuthOptions = {
       }
     }
   },
-  pages: {
-    error: '/auth/error'
-  },
   debug: process.env.NODE_ENV === 'development'
 }
 
