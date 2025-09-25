@@ -11,11 +11,11 @@ export class ClaudeAnalyzer {
   }
 
   async analyzeRepository(repoData: {
-    packageJson?: string;
-    rootFiles: string[];
-    srcFiles: string[];
-    configFiles: Record<string, string>;
-  }): Promise<ProjectAnalysis> {
+  packageJson?: string | null;  // Add | null
+  rootFiles: string[];
+  srcFiles: string[];
+  configFiles: Record<string, string>;
+}): Promise<ProjectAnalysis> {
     
     const prompt = this.buildAnalysisPrompt(repoData);
     
@@ -38,11 +38,11 @@ export class ClaudeAnalyzer {
   }
 
   private buildAnalysisPrompt(repoData: {
-    packageJson?: string;
-    rootFiles: string[];
-    srcFiles: string[];
-    configFiles: Record<string, string>;
-  }): string {
+  packageJson?: string | null;  // Add | null here too
+  rootFiles: string[];
+  srcFiles: string[];
+  configFiles: Record<string, string>;
+}): string {
     return `
 You are an expert at analyzing JavaScript/TypeScript repositories to detect their framework and project type. 
 
