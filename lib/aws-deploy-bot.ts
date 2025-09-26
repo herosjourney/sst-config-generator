@@ -206,7 +206,7 @@ export default class AWSDeployBot {
       projectType: analysis.type,
       region: 'us-east-1',
       customDomain: { enabled: false },
-      userDistribution: 'worldwide', as const // This ensures it's treated as a literal
+      userDistribution: 'worldwide' as const, // This ensures it's treated as a literal
       buildCommand: analysis.buildCommand,
       outputDir: analysis.outputDir,
       performance: 'fast',
