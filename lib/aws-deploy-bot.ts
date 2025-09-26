@@ -210,7 +210,6 @@ export default class AWSDeployBot {
       buildCommand: analysis.buildCommand,
       outputDir: analysis.outputDir,
       performance: 'fast' as const,
-      performance: 'fast',
       expectedUsers: '<100'
     };
 
