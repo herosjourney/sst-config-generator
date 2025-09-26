@@ -210,7 +210,7 @@ export default class AWSDeployBot {
       buildCommand: analysis.buildCommand,
       outputDir: analysis.outputDir,
       performance: 'fast' as const,
-      expectedUsers: '<100'
+      expectedUsers: '<100' as const
     };
 
     // Generate SST config using your existing generator
