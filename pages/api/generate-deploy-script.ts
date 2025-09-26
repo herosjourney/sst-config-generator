@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       archive.append(content, { name: filename })
     })
     
-    archive.append(quickDeployScript, { name: 'quick-deploy.js' })
+    archive.append(quickDeployScript, { name: 'deploy.sh' })
     archive.append(packageJson, { name: 'package.json' })
     archive.append(readme, { name: 'README.md' })
     
@@ -55,202 +55,248 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 }
 
 function generateQuickDeployScript(repository: any, config: any): string {
-  return `#!/usr/bin/env node
+  const packageName = config.projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  
+  return `#!/bin/bash
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const readline = require('readline');
+# SST Auto-Deploy Script
+# Generated for: ${config.projectName}
+# Repository: ${repository.html_url}
 
-// ANSI color codes for better console output
-const colors = {
-  reset: '\\x1b[0m',
-  bright: '\\x1b[1m',
-  red: '\\x1b[31m',
-  green: '\\x1b[32m',
-  yellow: '\\x1b[33m',
-  blue: '\\x1b[34m',
-  cyan: '\\x1b[36m'
-};
+set -e  # Exit on any error
 
-class LocalSST_Deployer {
-  constructor() {
-    this.projectName = '${config.projectName}';
-    this.repoUrl = '${repository.clone_url || repository.html_url}';
-    this.region = '${config.region || 'us-east-1'}';
-  }
+# Colors for output
+RED='\\033[0;31m'
+GREEN='\\033[0;32m'
+YELLOW='\\033[1;33m'
+BLUE='\\033[0;34m'
+CYAN='\\033[0;36m'
+NC='\\033[0m' # No Color
 
-  log(message, color = 'reset') {
-    console.log(\`\${colors[color]}\${message}\${colors.reset}\`);
-  }
+# Project configuration
+PROJECT_NAME="${config.projectName}"
+REPO_URL="${repository.html_url}"
+AWS_REGION="${config.region || 'us-east-1'}"
 
-  error(message) {
-    this.log(\`❌ \${message}\`, 'red');
-  }
+echo -e "\${CYAN}=========================================\${NC}"
+echo -e "\${CYAN}🚀 SST Auto-Deploy for \${PROJECT_NAME}\${NC}"
+echo -e "\${CYAN}=========================================\${NC}"
 
-  success(message) {
-    this.log(\`✅ \${message}\`, 'green');
-  }
+# Function to print colored output
+log_info() { echo -e "\${BLUE}ℹ️  \$1\${NC}"; }
+log_success() { echo -e "\${GREEN}✅ \$1\${NC}"; }
+log_error() { echo -e "\${RED}❌ \$1\${NC}"; }
+log_warning() { echo -e "\${YELLOW}⚠️  \$1\${NC}"; }
 
-  info(message) {
-    this.log(\`ℹ️  \${message}\`, 'cyan');
-  }
-
-  async checkPrerequisites() {
-    this.log('\\n🔍 Checking prerequisites...', 'bright');
-    
-    const checks = [
-      { cmd: 'git --version', name: 'Git', error: 'Git not installed. Please install Git first.' },
-      { cmd: 'node --version', name: 'Node.js', error: 'Node.js not installed. Please install Node.js first.' },
-      { cmd: 'npm --version', name: 'npm', error: 'npm not installed. Please install npm first.' },
-      { cmd: 'aws sts get-caller-identity', name: 'AWS credentials', error: 'AWS CLI not configured. Run: aws configure' }
-    ];
-
-    for (const check of checks) {
-      try {
-        execSync(check.cmd, { stdio: 'pipe' });
-        this.success(\`\${check.name} is available\`);
-      } catch (error) {
-        this.error(check.error);
-        process.exit(1);
-      }
-    }
-
-    // Show AWS account info
-    try {
-      const awsInfo = execSync('aws sts get-caller-identity', { encoding: 'utf8' });
-      const account = JSON.parse(awsInfo);
-      this.info(\`AWS Account: \${account.Account}\`);
-      this.info(\`AWS Region: \${this.region}\`);
-    } catch (error) {
-      this.info('Could not retrieve AWS account information');
-    }
-  }
-
-  async confirmDeployment() {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-
-    return new Promise((resolve) => {
-      this.log('\\n📋 Deployment Summary:', 'bright');
-      this.log(\`   Project: \${this.projectName}\`);
-      this.log(\`   Repository: \${this.repoUrl}\`);
-      this.log(\`   Region: \${this.region}\`);
-      this.log(\`   This will create AWS resources in your account.\`);
-      
-      rl.question('\\n❓ Continue with deployment? (y/N): ', (answer) => {
-        rl.close();
-        resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-      });
-    });
-  }
-
-  async cloneAndDeploy() {
-    this.log('\\n📥 Cloning repository...', 'bright');
-    
-    const tempDir = \`temp-\${Date.now()}\`;
-    
-    try {
-      // Clone repository
-      execSync(\`git clone "\${this.repoUrl}" "\${tempDir}"\`, { stdio: 'inherit' });
-      process.chdir(tempDir);
-      
-      this.success('Repository cloned successfully');
-      
-      // Copy SST config files
-      this.log('\\n⚙️ Setting up SST configuration...', 'bright');
-      
-      // Copy the generated files from parent directory
-      const filesToCopy = ['sst.config.ts'];
-      filesToCopy.forEach(file => {
-        if (fs.existsSync(path.join('..', file))) {
-          fs.copyFileSync(path.join('..', file), file);
-        }
-      });
-      
-      // Install dependencies
-      this.log('\\n📦 Installing dependencies...', 'bright');
-      execSync('npm install', { stdio: 'inherit' });
-      
-      // Add SST if not already present
-      try {
-        execSync('npm list sst', { stdio: 'pipe' });
-      } catch (error) {
-        this.info('Installing SST...');
-        execSync('npm install sst@latest', { stdio: 'inherit' });
-      }
-      
-      this.success('Dependencies installed');
-      
-      // Deploy to AWS
-      this.log('\\n🚀 Deploying to AWS...', 'bright');
-      this.info('This may take 5-10 minutes for the first deployment...');
-      
-      execSync('npx sst deploy --stage production', { stdio: 'inherit' });
-      
-      this.success('🎉 Deployment completed successfully!');
-      
-      // Show outputs
-      try {
-        this.log('\\n📊 Deployment Information:', 'bright');
-        execSync('npx sst env', { stdio: 'inherit' });
-      } catch (error) {
-        this.info('Could not retrieve deployment outputs');
-      }
-      
-      // Cleanup
-      process.chdir('..');
-      execSync(\`rm -rf "\${tempDir}"\`, { stdio: 'pipe' });
-      
-    } catch (error) {
-      this.error(\`Deployment failed: \${error.message}\`);
-      
-      // Cleanup on error
-      try {
-        process.chdir('..');
-        execSync(\`rm -rf "\${tempDir}"\`, { stdio: 'pipe' });
-      } catch (cleanupError) {
-        // Ignore cleanup errors
-      }
-      
-      process.exit(1);
-    }
-  }
-
-  async run() {
-    try {
-      this.log('=====================================', 'cyan');
-      this.log('🚀 SST Local Deployment', 'cyan');
-      this.log(\`   Project: \${this.projectName}\`, 'cyan');
-      this.log('=====================================', 'cyan');
-
-      await this.checkPrerequisites();
-      
-      const shouldDeploy = await this.confirmDeployment();
-      if (!shouldDeploy) {
-        this.info('Deployment cancelled by user');
-        process.exit(0);
-      }
-
-      await this.cloneAndDeploy();
-      
-      this.log('\\n🔧 Useful Commands:', 'bright');
-      this.log('   • View logs: npx sst logs');
-      this.log('   • Remove deployment: npx sst remove');
-      this.log('   • Dev mode: npx sst dev');
-
-    } catch (error) {
-      this.error(\`Deployment failed: \${error.message}\`);
-      process.exit(1);
-    }
-  }
+# Function to check if command exists
+command_exists() {
+    command -v "\$1" >/dev/null 2>&1
 }
 
-// Run the deployment
-const deployer = new LocalSST_Deployer();
-deployer.run();`;
+# Function to check prerequisites
+check_prerequisites() {
+    log_info "Checking prerequisites..."
+    
+    local all_good=true
+    
+    # Check Git
+    if command_exists git; then
+        log_success "Git is installed"
+    else
+        log_error "Git is not installed. Please install Git first."
+        echo "  📥 Download: https://git-scm.com/downloads"
+        all_good=false
+    fi
+    
+    # Check Node.js
+    if command_exists node; then
+        local node_version=\$(node --version)
+        log_success "Node.js is installed (\$node_version)"
+    else
+        log_error "Node.js is not installed. Please install Node.js first."
+        echo "  📥 Download: https://nodejs.org/"
+        all_good=false
+    fi
+    
+    # Check npm
+    if command_exists npm; then
+        local npm_version=\$(npm --version)
+        log_success "npm is installed (\$npm_version)"
+    else
+        log_error "npm is not installed. Please install npm first."
+        all_good=false
+    fi
+    
+    # Check AWS CLI
+    if command_exists aws; then
+        log_success "AWS CLI is installed"
+        
+        # Check AWS credentials
+        if aws sts get-caller-identity >/dev/null 2>&1; then
+            local account_id=\$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
+            local current_region=\$(aws configure get region 2>/dev/null || echo "us-east-1")
+            log_success "AWS credentials are configured"
+            log_info "AWS Account: \$account_id"
+            log_info "AWS Region: \$current_region"
+        else
+            log_error "AWS CLI is not configured with valid credentials"
+            echo "  🔧 Run: aws configure"
+            echo "  📖 Guide: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html"
+            all_good=false
+        fi
+    else
+        log_error "AWS CLI is not installed"
+        echo "  📥 Install: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+        all_good=false
+    fi
+    
+    if [ "\$all_good" = false ]; then
+        echo ""
+        log_error "Please install the missing prerequisites and run this script again."
+        exit 1
+    fi
+    
+    echo ""
+    log_success "All prerequisites satisfied!"
+}
+
+# Function to setup SST configuration
+setup_sst_config() {
+    log_info "Setting up SST configuration..."
+    
+    # Create backup of existing files if they exist
+    if [ -f "sst.config.ts" ]; then
+        log_warning "Existing sst.config.ts found. Creating backup..."
+        cp sst.config.ts sst.config.ts.backup.\$(date +%s)
+    fi
+    
+    if [ -f "package.json" ]; then
+        log_info "Updating existing package.json with SST dependencies..."
+        # Use Node.js to update package.json with SST
+        node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.scripts = { ...pkg.scripts, 'sst:dev': 'sst dev', 'sst:build': 'sst build', 'sst:deploy': 'sst deploy', 'sst:remove': 'sst remove' };
+            pkg.devDependencies = { ...pkg.devDependencies, 'sst': '^3.0.0' };
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+        "
+    else
+        log_info "Creating package.json..."
+        cat > package.json << 'EOL'
+{
+  "name": "${packageName}",
+  "version": "1.0.0",
+  "scripts": {
+    "sst:dev": "sst dev",
+    "sst:build": "sst build", 
+    "sst:deploy": "sst deploy",
+    "sst:remove": "sst remove"
+  },
+  "devDependencies": {
+    "sst": "^3.0.0"
+  }
+}
+EOL
+    fi
+    
+    # The sst.config.ts will be created by the downloaded package
+    log_success "SST configuration ready"
+}
+
+# Function to install dependencies
+install_dependencies() {
+    log_info "Installing dependencies..."
+    
+    # Install project dependencies
+    npm install
+    
+    # Check if SST is globally available, if not install it
+    if ! command_exists sst; then
+        log_info "Installing SST globally..."
+        npm install -g sst@latest
+    fi
+    
+    log_success "Dependencies installed"
+}
+
+# Function to deploy to AWS
+deploy_to_aws() {
+    log_info "Starting deployment to AWS..."
+    log_warning "This may take 5-10 minutes for the first deployment..."
+    
+    # Set AWS region if specified
+    if [ -n "\$AWS_REGION" ]; then
+        export AWS_REGION="\$AWS_REGION"
+        log_info "Using AWS region: \$AWS_REGION"
+    fi
+    
+    # Bootstrap SST if needed (this is idempotent)
+    log_info "Bootstrapping SST..."
+    sst bootstrap --stage production || log_warning "Bootstrap may have already been completed"
+    
+    # Deploy the application
+    log_info "Deploying application..."
+    sst deploy --stage production
+    
+    log_success "🎉 Deployment completed successfully!"
+}
+
+# Function to show deployment info
+show_deployment_info() {
+    echo ""
+    log_info "Retrieving deployment information..."
+    
+    # Try to get deployment outputs
+    if sst env --stage production >/dev/null 2>&1; then
+        echo -e "\${BLUE}📊 Deployment Information:\${NC}"
+        sst env --stage production
+    else
+        log_warning "Could not retrieve deployment outputs"
+    fi
+    
+    echo ""
+    echo -e "\${BLUE}🔧 Useful Commands:\${NC}"
+    echo "  • View logs: sst logs --stage production"
+    echo "  • Open console: sst console --stage production" 
+    echo "  • Remove deployment: sst remove --stage production"
+    echo "  • Development mode: sst dev"
+    echo ""
+    echo -e "\${GREEN}🌐 Your application is now deployed to AWS!\${NC}"
+}
+
+# Function to confirm deployment
+confirm_deployment() {
+    echo ""
+    echo -e "\${BLUE}📋 Deployment Summary:\${NC}"
+    echo "  Project: \$PROJECT_NAME"
+    echo "  Repository: \$REPO_URL"
+    echo "  AWS Region: \${AWS_REGION:-default}"
+    echo "  Stage: production"
+    echo ""
+    echo -e "\${YELLOW}This will create AWS resources in your account.\${NC}"
+    echo ""
+    
+    read -p "Continue with deployment? (y/N): " -n 1 -r
+    echo ""
+    
+    if [[ ! \$REPLY =~ ^[Yy]\$ ]]; then
+        log_info "Deployment cancelled by user"
+        exit 0
+    fi
+}
+
+# Main execution
+main() {
+    check_prerequisites
+    confirm_deployment
+    setup_sst_config
+    install_dependencies
+    deploy_to_aws
+    show_deployment_info
+}
+
+# Run main function
+main "\$@"`;
 }
 
 function generatePackageJson(config: any): string {
@@ -259,7 +305,7 @@ function generatePackageJson(config: any): string {
     "version": "1.0.0",
     "type": "module",
     "scripts": {
-      "deploy": "node quick-deploy.js",
+      "deploy": "bash deploy.sh",
       "dev": "sst dev",
       "build": "sst build",
       "remove": "sst remove"
@@ -282,12 +328,13 @@ function generateReadme(config: any, repository: any): string {
 
 2. **Deploy**
    \`\`\`bash
-   node quick-deploy.js
+   chmod +x deploy.sh
+   ./deploy.sh
    \`\`\`
 
 ## What This Does
 
-- Clones your repository: ${repository.html_url}
+- Uses your existing project directory
 - Sets up SST configuration for ${config.framework}
 - Deploys to AWS region: ${config.region}
 - ${config.userDistribution === 'worldwide' ? 'Sets up global CDN' : 'Regional deployment'}
@@ -298,17 +345,13 @@ function generateReadme(config: any, repository: any): string {
 If you prefer manual control:
 
 \`\`\`bash
-# 1. Clone your repository
-git clone ${repository.clone_url || repository.html_url} my-project
-cd my-project
+# 1. Copy sst.config.ts to your project root
 
-# 2. Copy SST config files (sst.config.ts) to your project root
-
-# 3. Install dependencies
+# 2. Install dependencies
 npm install
 npm install sst@latest
 
-# 4. Deploy
+# 3. Deploy
 npx sst deploy --stage production
 \`\`\`
 
