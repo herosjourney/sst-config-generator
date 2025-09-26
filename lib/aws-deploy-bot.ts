@@ -3,6 +3,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import os from 'os';
 import { SSTGenerator } from './sst-generator';
+import {DeploymentConfig} rom '../types';
 
 type ProgressCallback = (progress: number, step: string, message: string, deploymentUrl?: string) => void;
 
@@ -205,7 +206,7 @@ export default class AWSDeployBot {
       projectType: analysis.type,
       region: 'us-east-1',
       customDomain: { enabled: false },
-      userDistribution: 'worldwide', // Default to worldwide for better performance
+      userDistribution: 'worldwide', as const // This ensures it's treated as a literal
       buildCommand: analysis.buildCommand,
       outputDir: analysis.outputDir,
       performance: 'fast',
