@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { DeploymentConfig, Repository } from '../types'
-import { Download, Save, Copy, Zap, Terminal, CheckCircle, XCircle, Loader } from 'lucide-react'
+import { Download, Save, Copy, Terminal } from 'lucide-react'
 
 interface ConfigResultProps {
   config: DeploymentConfig
@@ -12,21 +12,6 @@ export default function ConfigResult({ config, repository, onSave }: ConfigResul
   const [saving, setSaving] = useState(false)
   const [configName, setConfigName] = useState(config.projectName)
   const [showSaveModal, setShowSaveModal] = useState(false)
-  
-  // Phase 1: Direct deployment state
-  const [deploymentState, setDeploymentState] = useState<{
-    status: 'idle' | 'deploying' | 'success' | 'error'
-    progress: number
-    currentStep: string
-    logs: string[]
-    deploymentUrl?: string
-    error?: string
-  }>({
-    status: 'idle',
-    progress: 0,
-    currentStep: '',
-    logs: [],
-  })
 
   const downloadConfig = async () => {
     try {
@@ -54,7 +39,7 @@ export default function ConfigResult({ config, repository, onSave }: ConfigResul
 
   const downloadDeployScript = async () => {
     if (!repository) {
-      alert('Repository information not available for one-click deploy')
+      alert('Repository information not available for deployment script')
       return
     }
 
@@ -70,7 +55,7 @@ export default function ConfigResult({ config, repository, onSave }: ConfigResul
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `deploy-${config.projectName}.js`
+        a.download = `${config.projectName}-deploy-package.zip`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -78,83 +63,6 @@ export default function ConfigResult({ config, repository, onSave }: ConfigResul
       }
     } catch (error) {
       console.error('Deploy script download failed:', error)
-    }
-  }
-
-  // Phase 1: Direct deployment with progress feedback
-  const deployDirectly = async () => {
-    if (!repository) {
-      alert('Repository information not available')
-      return
-    }
-
-    setDeploymentState({
-      status: 'deploying',
-      progress: 0,
-      currentStep: 'Starting deployment...',
-      logs: ['🚀 Direct deployment initiated...'],
-    })
-
-    try {
-      const response = await fetch('/api/deploy-direct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          repository,
-          config,
-          progressCallback: true // Enable server-sent events
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Deployment failed to start')
-      }
-
-      // Handle server-sent events for progress updates
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value)
-          const lines = chunk.split('\n')
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6))
-                setDeploymentState(prev => ({
-                  ...prev,
-                  progress: data.progress || prev.progress,
-                  currentStep: data.step || prev.currentStep,
-                  logs: [...prev.logs, data.message],
-                  deploymentUrl: data.deploymentUrl || prev.deploymentUrl,
-                }))
-              } catch (e) {
-                // Ignore malformed JSON
-              }
-            }
-          }
-        }
-      }
-
-      setDeploymentState(prev => ({
-        ...prev,
-        status: 'success',
-        progress: 100,
-        currentStep: 'Deployment complete!',
-      }))
-
-    } catch (error) {
-      setDeploymentState(prev => ({
-        ...prev,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        currentStep: 'Deployment failed',
-      }))
     }
   }
 
@@ -175,141 +83,73 @@ export default function ConfigResult({ config, repository, onSave }: ConfigResul
   const copyInstructions = () => {
     const instructions = `# SST Deployment Instructions
 
-## Quick Deploy Options:
-1. Use "Deploy Now" button for instant deployment
-2. Download deploy script for local deployment  
-3. Download config files for manual setup
+## Recommended: Quick Local Deploy
+1. Click "Download Deploy Package"
+2. Extract the ZIP file
+3. Open terminal in the extracted folder
+4. Run: node quick-deploy.js
+5. Follow the prompts (will check AWS credentials automatically)
 
-## Manual Setup:
-1. Extract the downloaded files to your project root
-2. Install dependencies: npm install
-3. Deploy to AWS: sst deploy --stage production
+## Manual Setup Alternative:
+1. Click "Download Config" to get SST configuration files
+2. Extract files to your project root directory
+3. Install dependencies: npm install
+4. Install SST: npm install sst@latest
+5. Deploy to AWS: npx sst deploy --stage production
 
-## Your Configuration:
+## Prerequisites:
+- AWS CLI configured (run: aws configure)
+- Node.js installed
+- Git installed
+- Proper AWS permissions for creating resources
+
+## Your Configuration Summary:
 - Project: ${config.projectName}
-- Framework: ${config.framework}
+- Framework: ${config.framework}  
+- Type: ${config.projectType}
+- Region: ${config.region}
 - Distribution: ${config.userDistribution}
-- Custom Domain: ${config.customDomain?.enabled ? config.customDomain.domain : 'No'}
+- Custom Domain: ${config.customDomain?.enabled ? config.customDomain.domain : 'Disabled'}
+${config.buildCommand ? `- Build Command: ${config.buildCommand}` : ''}
+${config.outputDir ? `- Output Directory: ${config.outputDir}` : ''}
+
+## What Gets Deployed:
+${config.projectType === 'SSR' ? '- Lambda functions for server-side rendering' : '- S3 bucket for static hosting'}
+${config.customDomain?.enabled ? '- Custom domain with SSL certificate' : '- AWS-generated URLs'}  
+${config.userDistribution === 'worldwide' ? '- CloudFront CDN for global distribution' : '- Regional deployment'}
+- Infrastructure as Code via SST
+
+## Estimated Costs:
+- Static sites: $1-5/month (mostly free tier)
+- SSR sites: $5-25/month (depending on traffic)
+- Custom domains: $0.50/month per domain
+
+## Security Note:
+Your AWS credentials stay on your local machine and never leave your computer. 
+This follows AWS security best practices.
+
+## Useful Commands After Deployment:
+- View logs: npx sst logs
+- Remove all resources: npx sst remove  
+- Development mode: npx sst dev
+- Open web console: npx sst console
+
+## Support:
+- SST Documentation: https://sst.dev/docs/
+- AWS Documentation: https://docs.aws.amazon.com/
 `
+
     navigator.clipboard.writeText(instructions)
-  }
-
-  // Show deployment progress modal
-  if (deploymentState.status !== 'idle') {
-    return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className={`border rounded-xl p-6 ${
-          deploymentState.status === 'success' ? 'bg-green-50 border-green-200' :
-          deploymentState.status === 'error' ? 'bg-red-50 border-red-200' :
-          'bg-blue-50 border-blue-200'
-        }`}>
-          <div className="flex items-center space-x-3 mb-6">
-            {deploymentState.status === 'deploying' && <Loader className="w-8 h-8 animate-spin text-blue-600" />}
-            {deploymentState.status === 'success' && <CheckCircle className="w-8 h-8 text-green-600" />}
-            {deploymentState.status === 'error' && <XCircle className="w-8 h-8 text-red-600" />}
-            
-            <div>
-              <h3 className="text-xl font-bold">
-                {deploymentState.status === 'deploying' && 'Deploying to AWS...'}
-                {deploymentState.status === 'success' && '🎉 Deployment Successful!'}
-                {deploymentState.status === 'error' && '❌ Deployment Failed'}
-              </h3>
-              <p className="text-sm opacity-80">{deploymentState.currentStep}</p>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="mb-6">
-            <div className="flex justify-between text-sm mb-2">
-              <span>Progress</span>
-              <span>{deploymentState.progress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div 
-                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                style={{ width: `${deploymentState.progress}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Deployment URL */}
-          {deploymentState.deploymentUrl && (
-            <div className="mb-4 p-4 bg-white rounded-lg border">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">🚀 Your app is live!</span>
-                <a 
-                  href={deploymentState.deploymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <span>Visit Site</span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                </a>
-              </div>
-              <div className="text-sm text-gray-600 mt-2 break-all">
-                {deploymentState.deploymentUrl}
-              </div>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {deploymentState.error && (
-            <div className="mb-4 p-4 bg-red-100 border border-red-300 rounded-lg">
-              <div className="font-medium text-red-800 mb-2">Error Details:</div>
-              <div className="text-sm text-red-700">{deploymentState.error}</div>
-            </div>
-          )}
-
-          {/* Live Logs */}
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Deployment Log:</div>
-            <div className="bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm max-h-48 overflow-y-auto">
-              {deploymentState.logs.map((log, index) => (
-                <div key={index} className="mb-1">{log}</div>
-              ))}
-              {deploymentState.status === 'deploying' && (
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin w-3 h-3 border border-green-400 border-t-transparent rounded-full"></div>
-                  <span>Processing...</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="mt-6 flex space-x-4">
-            {deploymentState.status === 'success' && (
-              <button
-                onClick={() => setDeploymentState({ status: 'idle', progress: 0, currentStep: '', logs: [] })}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
-              >
-                Deploy Another Project
-              </button>
-            )}
-            
-            {deploymentState.status === 'error' && (
-              <>
-                <button
-                  onClick={() => deployDirectly()}
-                  className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700"
-                >
-                  Retry Deployment
-                </button>
-                <button
-                  onClick={() => setDeploymentState({ status: 'idle', progress: 0, currentStep: '', logs: [] })}
-                  className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
-                >
-                  Back to Options
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    )
+    
+    // Optional: Show a brief confirmation
+    const button = document.activeElement
+    if (button && button.textContent) {
+      const originalText = button.textContent
+      button.textContent = 'Copied!'
+      setTimeout(() => {
+        button.textContent = originalText
+      }, 2000)
+    }
   }
 
   return (
@@ -350,58 +190,31 @@ export default function ConfigResult({ config, repository, onSave }: ConfigResul
       </div>
 
       {/* Deployment Options */}
-      <div className="grid md:grid-cols-3 gap-4">
-        {/* Instant Deploy */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Quick Local Deploy */}
         <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl p-6">
           <div className="flex items-center space-x-3 mb-4">
             <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-              <Zap className="w-5 h-5" />
+              <Terminal className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-semibold">Deploy Now</h3>
-              <p className="text-sm opacity-90">Instant deployment with live progress</p>
-            </div>
-          </div>
-          
-          <button
-            onClick={deployDirectly}
-            className="w-full bg-white/20 hover:bg-white/30 text-white py-3 px-4 rounded-lg font-medium transition-colors mb-3"
-            disabled={!repository}
-          >
-            🚀 Deploy to AWS Now
-          </button>
-          
-          <div className="text-xs opacity-80 space-y-1">
-            <p>• Live progress updates</p>
-            <p>• 5-10 minutes to completion</p>
-            <p>• Instant live URL</p>
-          </div>
-        </div>
-
-        {/* Local Deploy Script */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-              <Terminal className="w-5 h-5 text-gray-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Deploy Script</h3>
-              <p className="text-sm text-gray-600">Run locally on your machine</p>
+              <h3 className="font-semibold">Quick Local Deploy</h3>
+              <p className="text-sm opacity-90">Automated local deployment script</p>
             </div>
           </div>
           
           <button
             onClick={downloadDeployScript}
-            className="w-full bg-gray-600 text-white py-3 px-4 rounded-lg hover:bg-gray-700 font-medium transition-colors mb-3"
+            className="w-full bg-white/20 hover:bg-white/30 text-white py-3 px-4 rounded-lg font-medium transition-colors mb-3"
             disabled={!repository}
           >
-            Download Script
+            📥 Download Deploy Package
           </button>
           
-          <div className="text-xs text-gray-500 space-y-1">
-            <p>• node deploy-{config.projectName}.js</p>
-            <p>• Run on your local machine</p>
-            <p>• Full terminal output</p>
+          <div className="text-xs opacity-80 space-y-1">
+            <p>• Uses your AWS credentials</p>
+            <p>• Runs on your local machine</p>
+            <p>• One command deployment</p>
           </div>
         </div>
 
@@ -428,6 +241,22 @@ export default function ConfigResult({ config, repository, onSave }: ConfigResul
             <p>• Extract to project root</p>
             <p>• npm install && sst deploy</p>
             <p>• Full control over process</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Security Note */}
+      <div className="p-6 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="flex items-start space-x-3">
+          <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+            <span className="text-amber-600 text-sm">🔒</span>
+          </div>
+          <div>
+            <h4 className="font-semibold text-amber-800 mb-2">Secure Local Deployment</h4>
+            <p className="text-amber-700 text-sm">
+              Your AWS credentials stay on your machine. The deployment package runs locally using your configured AWS CLI, 
+              ensuring your credentials never leave your computer. This is the recommended approach for security and reliability.
+            </p>
           </div>
         </div>
       </div>
