@@ -274,7 +274,7 @@ export default function Home() {
           <div className="fade-in">
             <ConfigResult 
               config={finalConfig} 
-              repository={selectedRepo}
+              repository={selectedRepo ?? undefined}
               onSave={saveConfiguration}
             />
             
