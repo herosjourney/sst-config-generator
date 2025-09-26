@@ -3,7 +3,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import os from 'os';
 import { SSTGenerator } from './sst-generator';
-import {DeploymentConfig} rom '../types';
+import {DeploymentConfig} from '../types';
 
 type ProgressCallback = (progress: number, step: string, message: string, deploymentUrl?: string) => void;
 
