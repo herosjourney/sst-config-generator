@@ -209,6 +209,7 @@ export default class AWSDeployBot {
       userDistribution: 'worldwide' as const, // This ensures it's treated as a literal
       buildCommand: analysis.buildCommand,
       outputDir: analysis.outputDir,
+      performance: 'fast' as const,
       performance: 'fast',
       expectedUsers: '<100'
     };
